@@ -127,7 +127,7 @@ function RepostModal({ entry, onClose }: { entry: PostHistoryEntry; onClose: () 
                 {result && (
                   result.success
                     ? <CheckCircle size={13} style={{ color: '#008a05' }} />
-                    : <AlertCircle size={13} style={{ color: '#c13515' }} title={result.error} />
+                    : <AlertCircle size={13} style={{ color: '#c13515' }} />
                 )}
               </label>
             );
