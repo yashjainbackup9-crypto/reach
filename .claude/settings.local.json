@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
+      "Bash(npx tsc *)",
+      "Bash(find *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(node *)",
+      "Skill(update-config)",
+      "Bash(xargs ls *)",
+      "Bash(grep -E \"\\\\.ts$\")"
+    ]
+  }
+}

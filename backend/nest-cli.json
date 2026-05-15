@@ -1,0 +1,7 @@
+{
+  "name": "multi-tenant-backend",
+  "alias": "nest",
+  "compilerOptions": {
+    "tsConfigPath": "tsconfig.json"
+  }
+}
