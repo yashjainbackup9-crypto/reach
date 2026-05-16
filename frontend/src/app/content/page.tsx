@@ -1,10 +1,11 @@
 'use client';
 import React, { useEffect, useState, useCallback } from 'react';
-import { contentApi, Tone, GenerateToneResponse, ContentRewrite, ImageGenerationResponse } from '@/lib/api';
+import { contentApi, Tone, GenerateToneResponse, ContentRewrite, ImageGenerationResponse, VideoGenerationResponse } from '@/lib/api';
 import { useToast } from '@/components/Toast';
-import { Wand2, RefreshCw, Trash2, Link, FileText, Copy, ChevronDown, ChevronUp, Pencil, Check, X, Image, Download } from 'lucide-react';
+import { Wand2, RefreshCw, Trash2, Link, FileText, Copy, ChevronDown, ChevronUp, Pencil, Check, X, Image, Download, Video, ExternalLink, Plus } from 'lucide-react';
+import { queuesApi } from '@/lib/api';
 
-type Tab = 'generate' | 'rewrite' | 'image' | 'tones';
+type Tab = 'generate' | 'rewrite' | 'image' | 'video' | 'tones';
 
 export default function ContentPage() {
   const [tab, setTab] = useState<Tab>('generate');
@@ -34,6 +35,7 @@ export default function ContentPage() {
           ['generate', 'Generate Tone'],
           ['rewrite', 'Rewrite Content'],
           ['image', 'Generate Image'],
+          ['video', 'Generate Video'],
           ['tones', `Saved Tones (${tones.length})`],
         ] as [Tab, string][]).map(([key, label]) => (
           <button key={key} className={`pill-tab ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>{label}</button>
@@ -43,6 +45,7 @@ export default function ContentPage() {
       {tab === 'generate' && <GenerateToneTab onSaved={fetchTones} />}
       {tab === 'rewrite'  && <RewriteTab tones={tones} />}
       {tab === 'image'    && <GenerateImageTab />}
+      {tab === 'video'    && <GenerateVideoTab />}
       {tab === 'tones'    && <TonesTab tones={tones} loading={loadingTones} onDeleted={fetchTones} />}
     </div>
   );
@@ -403,6 +406,213 @@ function RewriteTab({ tones }: { tones: Tone[] }) {
         <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 280, textAlign: 'center' }}>
           <RefreshCw size={32} color="var(--color-muted-soft)" style={{ marginBottom: 12 }} />
           <p style={{ fontSize: 14, color: 'var(--color-muted)' }}>Rewritten content will appear here</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Generate Video Tab ─────────────────────────────────────────────────── */
+function GenerateVideoTab() {
+  const [instagramUrl, setInstagramUrl] = useState('');
+  const [template, setTemplate] = useState<'slideshow' | 'reel'>('slideshow');
+  const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState('');
+  const [result, setResult] = useState<VideoGenerationResponse | null>(null);
+  const [addingToQueue, setAddingToQueue] = useState(false);
+  const { toast } = useToast();
+
+  const progressMessages = [
+    'Scraping Instagram post…',
+    'Bundling Remotion compositions…',
+    'Rendering video frames…',
+    'Uploading to Cloudinary…',
+    'Almost done…',
+  ];
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!instagramUrl.trim()) { toast('Enter an Instagram URL', 'error'); return; }
+    setLoading(true);
+    setResult(null);
+
+    let msgIdx = 0;
+    setLoadingMsg(progressMessages[0]);
+    const interval = setInterval(() => {
+      msgIdx = Math.min(msgIdx + 1, progressMessages.length - 1);
+      setLoadingMsg(progressMessages[msgIdx]);
+    }, 12000);
+
+    try {
+      const res = await contentApi.generateVideo({ instagramUrl: instagramUrl.trim(), template });
+      setResult(res);
+      toast('Video generated!', 'success');
+    } catch (err: any) {
+      toast(err.message, 'error');
+    } finally {
+      clearInterval(interval);
+      setLoading(false);
+      setLoadingMsg('');
+    }
+  };
+
+  const handleAddToQueue = async () => {
+    if (!result) return;
+    setAddingToQueue(true);
+    try {
+      await queuesApi.addItem({
+        type: 'video',
+        url: result.videoUrl,
+        text: result.caption,
+      });
+      toast('Video added to queue!', 'success');
+    } catch (err: any) {
+      toast(err.message, 'error');
+    } finally {
+      setAddingToQueue(false);
+    }
+  };
+
+  return (
+    <div className="grid-2" style={{ alignItems: 'start' }}>
+      <div className="card">
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Generate Video from Instagram</h2>
+        <p style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 24 }}>
+          Paste an Instagram post URL — we'll scrape the content and render a realistic MP4 via Remotion.
+        </p>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div className="form-group">
+            <label className="form-label">Instagram post URL</label>
+            <input
+              className="input"
+              placeholder="https://www.instagram.com/p/abc123/"
+              value={instagramUrl}
+              onChange={e => setInstagramUrl(e.target.value)}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Template</label>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {([
+                ['slideshow', 'Slideshow', '1080 × 1080'],
+                ['reel', 'Reel', '1080 × 1920'],
+              ] as [typeof template, string, string][]).map(([val, lbl, size]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setTemplate(val)}
+                  disabled={loading}
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 4,
+                    padding: '14px 12px',
+                    borderRadius: 'var(--r-sm)',
+                    border: `2px solid ${template === val ? 'var(--color-primary)' : 'var(--color-hairline)'}`,
+                    background: template === val ? '#fff0f1' : 'var(--color-canvas)',
+                    color: template === val ? 'var(--color-primary)' : 'var(--color-muted)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>{lbl}</span>
+                  <span style={{ fontSize: 11, opacity: 0.7 }}>{size}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button className="btn-primary" type="submit" disabled={loading}>
+            {loading
+              ? <><div className="spinner" style={{ width: 18, height: 18, borderTopColor: '#fff' }} /> {loadingMsg}</>
+              : <><Video size={16} /> Generate Video</>}
+          </button>
+        </form>
+
+        {loading && (
+          <div className="fade-in" style={{ marginTop: 20, padding: '14px 16px', background: 'var(--color-surface-soft)', borderRadius: 'var(--r-sm)', fontSize: 13, color: 'var(--color-muted)' }}>
+            First run bundles the Remotion compositions (~30–60 s). Subsequent renders are faster.
+          </div>
+        )}
+      </div>
+
+      {result ? (
+        <div className="card fade-in">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Generated Video</h3>
+            <span className="badge badge-success">Ready</span>
+          </div>
+
+          <video
+            src={result.videoUrl}
+            controls
+            style={{ width: '100%', borderRadius: 'var(--r-sm)', border: '1px solid var(--color-hairline)', marginBottom: 16, maxHeight: 480, objectFit: 'contain', background: '#000' }}
+          />
+
+          <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+            <a
+              href={result.videoUrl}
+              download
+              target="_blank"
+              rel="noreferrer"
+              className="btn-ghost btn-sm"
+              style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <Download size={14} /> Download
+            </a>
+            <a
+              href={result.videoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-ghost btn-sm"
+              style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <ExternalLink size={14} /> Open
+            </a>
+            <button className="btn-primary btn-sm" onClick={handleAddToQueue} disabled={addingToQueue}>
+              {addingToQueue
+                ? <div className="spinner" style={{ width: 14, height: 14, borderTopColor: '#fff' }} />
+                : <Plus size={14} />}
+              Add to Queue
+            </button>
+          </div>
+
+          {result.author && (
+            <div className="form-group" style={{ marginBottom: 10 }}>
+              <label className="form-label">Author</label>
+              <p style={{ fontSize: 14 }}>@{result.author}</p>
+            </div>
+          )}
+
+          {result.caption && (
+            <div className="form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="form-label">Caption</label>
+                <button className="btn-ghost btn-sm" onClick={() => navigator.clipboard.writeText(result.caption)}>
+                  <Copy size={13} /> Copy
+                </button>
+              </div>
+              <div className="code-block" style={{ fontSize: 12, maxHeight: 120, overflowY: 'auto' }}>{result.caption}</div>
+            </div>
+          )}
+
+          <p style={{ fontSize: 12, color: 'var(--color-muted)', marginTop: 8 }}>
+            Template: <strong>{result.template}</strong> · {result.mediaUrls.length} image{result.mediaUrls.length !== 1 ? 's' : ''} scraped
+          </p>
+        </div>
+      ) : (
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 360, textAlign: 'center' }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#fff0f1', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+            <Video size={28} color="var(--color-primary)" />
+          </div>
+          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Your video will appear here</h3>
+          <p style={{ fontSize: 14, color: 'var(--color-muted)' }}>Paste an Instagram URL and click Generate Video</p>
         </div>
       )}
     </div>

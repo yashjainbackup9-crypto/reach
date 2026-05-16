@@ -10,6 +10,7 @@ import { Tone } from './schemas/tone.schema';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ImageGenerationService, ImageGenerationOptions } from './image-generation.service';
 import { InstagramScraperService } from '../instagram/instagram-scraper.service';
+import { VideoGenerationService, VideoTemplate, VideoGenerationResult } from './video-generation.service';
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -55,6 +56,14 @@ class RewriteContentDto {
     toneName: string;
 }
 
+class GenerateVideoDto {
+    @ApiProperty({ description: 'Public Instagram post URL', example: 'https://www.instagram.com/p/abc123/' })
+    instagramUrl: string;
+
+    @ApiPropertyOptional({ enum: ['slideshow', 'reel'], default: 'slideshow', description: 'slideshow = square 1080×1080, reel = vertical 1080×1920' })
+    template?: VideoTemplate;
+}
+
 // ─── Response shapes ──────────────────────────────────────────────────────────
 
 class GenerateToneResponse {
@@ -79,6 +88,7 @@ export class ContentController {
         private readonly tonesService: TonesService,
         private readonly imageGenerationService: ImageGenerationService,
         private readonly instagramScraperService: InstagramScraperService,
+        private readonly videoGenerationService: VideoGenerationService,
     ) { }
 
     @Post('generate-image')
@@ -117,6 +127,32 @@ export class ContentController {
         this.logger.debug(`POST /api/content/generate-image completed model=${result.model} userId=${req.user.userId}`);
 
         return { ...result, prompt };
+    }
+
+    @Post('generate-video')
+    @ApiOperation({
+        summary: 'Scrape an Instagram post and render it as an MP4 via Remotion. Returns a Cloudinary video URL.',
+        description: 'First call bundles the Remotion compositions (30-60 s one-time cost). Subsequent renders take 20-60 s depending on slide count and video length.',
+    })
+    @ApiBody({ type: GenerateVideoDto })
+    @ApiResponse({ status: 201, description: 'Cloudinary video URL and post metadata' })
+    async generateVideo(
+        @Request() req: any,
+        @Body() dto: GenerateVideoDto,
+    ): Promise<VideoGenerationResult> {
+        this.logger.debug(`POST /api/content/generate-video userId=${req.user.userId} template=${dto.template ?? 'slideshow'}`);
+
+        if (!dto.instagramUrl?.trim()) {
+            throw new BadRequestException('instagramUrl is required');
+        }
+
+        const result = await this.videoGenerationService.generateFromInstagramUrl(
+            dto.instagramUrl.trim(),
+            dto.template ?? 'slideshow',
+        );
+
+        this.logger.debug(`POST /api/content/generate-video completed videoUrl=${result.videoUrl} userId=${req.user.userId}`);
+        return result;
     }
 
     @Post('generate-tone')

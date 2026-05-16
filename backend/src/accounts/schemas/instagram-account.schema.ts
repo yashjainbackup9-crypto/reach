@@ -17,6 +17,12 @@ export class InstagramAccount extends Document {
   @Prop({ required: true })
   accessToken: string; // Long-lived user access token
 
+  @Prop()
+  pageAccessToken: string; // Facebook Page access token — required for private_replies
+
+  @Prop()
+  pageId: string; // Facebook Page ID linked to this IG business account
+
   @Prop({ type: Date })
   tokenExpiresAt: Date;
 

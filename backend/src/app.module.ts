@@ -9,6 +9,7 @@ import { ContentModule } from './content/content.module';
 import { QueuesModule } from './queues/queues.module';
 import { SchedulesModule } from './schedules/schedules.module';
 import { PostHistoryModule } from './post-history/post-history.module';
+import { CampaignsModule } from './campaigns/campaigns.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { PostHistoryModule } from './post-history/post-history.module';
     QueuesModule,
     SchedulesModule,
     PostHistoryModule,
+    CampaignsModule,
   ],
 })
 export class AppModule { }
@@ -29,12 +31,16 @@ export function setupSwagger(app: any) {
   const config = new DocumentBuilder()
     .setTitle('Multi-Tenant Social Media Manager')
     .setDescription(
-      'API for managing multi-tenant social media with LinkedIn integration and content generation',
+      'API for managing multi-tenant social media with LinkedIn, Instagram, and Facebook integration, ' +
+      'content generation, and comment-automation campaigns.',
     )
     .setVersion('1.0.0')
     .addBearerAuth()
     .addTag('Authentication')
     .addTag('LinkedIn Accounts')
+    .addTag('Instagram Accounts')
+    .addTag('Facebook Accounts')
+    .addTag('Campaigns')
     .addTag('Queues')
     .addTag('Content')
     .addTag('Schedules')

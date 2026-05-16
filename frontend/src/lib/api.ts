@@ -98,6 +98,19 @@ export interface ImageGenerationRequest {
   apiKey?: string;
 }
 
+export interface VideoGenerationRequest {
+  instagramUrl: string;
+  template?: 'slideshow' | 'reel';
+}
+
+export interface VideoGenerationResponse {
+  videoUrl: string;
+  caption: string;
+  author: string;
+  mediaUrls: string[];
+  template: 'slideshow' | 'reel';
+}
+
 export const contentApi = {
   generateTone: (data: { type: 'instagram_link' | 'text'; input: string; name: string }) =>
     request<GenerateToneResponse>('/api/content/generate-tone', { method: 'POST', body: JSON.stringify(data) }),
@@ -107,6 +120,9 @@ export const contentApi = {
 
   generateImage: (data: ImageGenerationRequest) =>
     request<ImageGenerationResponse>('/api/content/generate-image', { method: 'POST', body: JSON.stringify(data) }),
+
+  generateVideo: (data: VideoGenerationRequest) =>
+    request<VideoGenerationResponse>('/api/content/generate-video', { method: 'POST', body: JSON.stringify(data) }),
 
   getTones: () => request<Tone[]>('/api/content/tones'),
 
@@ -362,6 +378,102 @@ export const postHistoryApi = {
       method: 'POST',
       body: JSON.stringify({ channels }),
     }),
+};
+
+// ─── Campaigns ────────────────────────────────────────────────────────────
+
+export interface PlatformPost {
+  id: string;
+  caption?: string;
+  message?: string;
+  mediaType?: string;
+  permalink?: string;
+  timestamp?: string;
+}
+
+export interface Campaign {
+  _id: string;
+  platform: 'instagram' | 'facebook';
+  accountId: string;
+  platformAccountId: string;
+  postId: string;
+  postCaption?: string;
+  postPermalink?: string;
+  keywords: string[];
+  publicReplyTemplate: string;
+  dmTemplate: string;
+  isActive: boolean;
+  lastCheckedAt?: string;
+  totalTriggered: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignStats {
+  campaign: Campaign;
+  totalProcessed: number;
+  repliesSent: number;
+  dmsSent: number;
+}
+
+export interface CommentProcessResult {
+  commentId: string;
+  matchedKeyword?: string;
+  replySent: boolean;
+  dmSent: boolean;
+  replyError?: string;
+  dmError?: string;
+}
+
+export const campaignsApi = {
+  getAll: () => request<Campaign[]>('/api/campaigns'),
+
+  getOne: (id: string) => request<Campaign>(`/api/campaigns/${id}`),
+
+  getStats: (id: string) => request<CampaignStats>(`/api/campaigns/${id}/stats`),
+
+  create: (data: {
+    platform: 'instagram' | 'facebook';
+    accountId: string;
+    platformAccountId: string;
+    postId: string;
+    postCaption?: string;
+    postPermalink?: string;
+    keywords?: string[];
+    publicReplyTemplate?: string;
+    dmTemplate?: string;
+  }) => request<Campaign>('/api/campaigns', { method: 'POST', body: JSON.stringify(data) }),
+
+  update: (id: string, data: {
+    postCaption?: string;
+    postPermalink?: string;
+    publicReplyTemplate?: string;
+    dmTemplate?: string;
+    keywords?: string[];
+    isActive?: boolean;
+  }) => request<Campaign>(`/api/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  addKeywords: (id: string, keywords: string[]) =>
+    request<Campaign>(`/api/campaigns/${id}/keywords`, { method: 'POST', body: JSON.stringify({ keywords }) }),
+
+  removeKeywords: (id: string, keywords: string[]) =>
+    request<Campaign>(`/api/campaigns/${id}/keywords`, { method: 'DELETE', body: JSON.stringify({ keywords }) }),
+
+  poll: (id: string) =>
+    request<{ triggered: number; results: CommentProcessResult[] }>(`/api/campaigns/${id}/poll`, { method: 'POST' }),
+
+  delete: (id: string) => request<{ deleted: boolean }>(`/api/campaigns/${id}`, { method: 'DELETE' }),
+
+  posts: {
+    listInstagram: (accountId: string, limit = 20) =>
+      request<{ posts: PlatformPost[] }>(`/api/campaigns/posts/instagram/${accountId}?limit=${limit}`),
+
+    listFacebook: (accountId: string, limit = 20) =>
+      request<{ posts: PlatformPost[] }>(`/api/campaigns/posts/facebook/${accountId}?limit=${limit}`),
+
+    search: (platform: 'instagram' | 'facebook', accountId: string, q: string, fetchLimit = 50) =>
+      request<{ posts: PlatformPost[] }>(`/api/campaigns/posts/search?platform=${platform}&accountId=${accountId}&q=${encodeURIComponent(q)}&fetchLimit=${fetchLimit}`),
+  },
 };
 
 // ─── Queues ───────────────────────────────────────────────────────────────

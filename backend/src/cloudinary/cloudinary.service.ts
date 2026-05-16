@@ -25,4 +25,15 @@ export class CloudinaryService {
     });
     return result.secure_url;
   }
+
+  async uploadVideo(filePath: string, folder = 'generated-videos'): Promise<string> {
+    this.ensureConfigured();
+    this.logger.debug(`Uploading video to Cloudinary folder=${folder} path=${filePath}`);
+    const result = await cloudinary.uploader.upload(filePath, {
+      folder,
+      resource_type: 'video',
+      chunk_size: 6_000_000,
+    });
+    return result.secure_url;
+  }
 }

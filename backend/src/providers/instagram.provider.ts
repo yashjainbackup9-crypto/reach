@@ -38,6 +38,7 @@ export class InstagramProvider implements IPublisher {
       scope: [
         'instagram_basic',
         'instagram_content_publish',
+        'instagram_manage_comments',
         'pages_show_list',
         'pages_read_engagement',
       ].join(','),
@@ -87,6 +88,8 @@ export class InstagramProvider implements IPublisher {
           tenantId,
           accountId: ig.id,
           accessToken: longToken, // long-lived user token
+          pageAccessToken: ig.pageAccessToken, // page token — required for private_replies
+          pageId: ig.pageId,
           tokenExpiresAt,
           username: ig.username ?? '',
           profileName: ig.name ?? ig.username ?? ig.id,
@@ -222,6 +225,8 @@ export class InstagramProvider implements IPublisher {
    */
   private async fetchInstagramAccounts(userToken: string): Promise<Array<{
     id: string;
+    pageId: string;
+    pageAccessToken: string;
     username?: string;
     name?: string;
     profile_picture_url?: string;
@@ -240,24 +245,28 @@ export class InstagramProvider implements IPublisher {
     }
 
     const pages: any[] = data['data'] ?? [];
-    const igAccounts: Array<{ id: string; username?: string; name?: string; profile_picture_url?: string }> = [];
+    const igAccounts: Array<{ id: string; pageId: string; pageAccessToken: string; username?: string; name?: string; profile_picture_url?: string }> = [];
 
     for (const page of pages) {
       const igId = page['instagram_business_account']?.id;
       if (!igId) continue;
 
+      const pageToken: string = page['access_token'] ?? userToken;
+
       // Fetch Instagram account details using the page access token
       const igRes = await fetch(
-        `${FB_BASE}/${igId}?fields=id,username,name,profile_picture_url&access_token=${page['access_token'] ?? userToken}`,
+        `${FB_BASE}/${igId}?fields=id,username,name,profile_picture_url&access_token=${pageToken}`,
       );
       if (!igRes.ok) {
         this.logger.warn(`Could not fetch IG details for id=${igId}: ${igRes.status}`);
-        igAccounts.push({ id: igId });
+        igAccounts.push({ id: igId, pageId: page['id'], pageAccessToken: pageToken });
         continue;
       }
       const igData = await igRes.json() as Record<string, any>;
       igAccounts.push({
         id: igId,
+        pageId: page['id'],
+        pageAccessToken: pageToken,
         username: igData['username'],
         name: igData['name'],
         profile_picture_url: igData['profile_picture_url'],
