@@ -125,11 +125,13 @@ export class SchedulesService implements OnModuleInit, OnModuleDestroy {
       const existingAiKey = aiConfig.apiKey ? undefined : schedule.aiConfig?.apiKey;
       schedule.aiConfig = this.encryptAiConfig(aiConfig);
       if (schedule.aiConfig && existingAiKey) schedule.aiConfig.apiKey = existingAiKey;
+      schedule.markModified('aiConfig');
     }
     if (imageConfig !== undefined) {
       const existingImgKey = imageConfig.apiKey ? undefined : schedule.imageConfig?.apiKey;
       schedule.imageConfig = this.encryptImageConfig(imageConfig);
       if (schedule.imageConfig && existingImgKey) schedule.imageConfig.apiKey = existingImgKey;
+      schedule.markModified('imageConfig');
     }
     await schedule.save();
     this.stopCrons(id);
