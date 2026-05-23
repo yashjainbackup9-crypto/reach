@@ -37,15 +37,24 @@ export class ImageGenerationService {
     return this._client;
   }
 
+  private sanitizePrompt(raw: string): string {
+    return raw
+      .replace(/[–—]/g, ‘-’)
+      .replace(/[‘’]/g, “’”)
+      .replace(/[“”]/g, ‘”’)
+      .replace(/…/g, ‘...’)
+      .replace(/[^\x00-\xFF]/g, ‘ ‘);
+  }
+
   async generateImage(prompt: string, options: ImageGenerationOptions = {}): Promise<ImageGenerationResult> {
-    const model = options.model ?? 'gpt-image-2-2026-04-21';
+    const model = options.model ?? ‘gpt-image-2-2026-04-21’;
     const client = options.apiKey ? new OpenAI({ apiKey: options.apiKey }) : this.defaultClient;
 
-    this.logger.debug(`Generating image model=${model} size=${options.size ?? '1024x1024'}`);
+    this.logger.debug(`Generating image model=${model} size=${options.size ?? ‘1024x1024’}`);
 
     const params: Record<string, unknown> = {
       model,
-      prompt,
+      prompt: this.sanitizePrompt(prompt),
       n: 1,
       size: options.size ?? '1024x1024',
       quality: options.quality ?? 'auto',
