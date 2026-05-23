@@ -122,10 +122,14 @@ export class SchedulesService implements OnModuleInit, OnModuleDestroy {
       schedule.telegramBotId = telegramBotId ? new Types.ObjectId(telegramBotId) : undefined;
     }
     if (aiConfig !== undefined) {
+      const existingAiKey = aiConfig.apiKey ? undefined : schedule.aiConfig?.apiKey;
       schedule.aiConfig = this.encryptAiConfig(aiConfig);
+      if (schedule.aiConfig && existingAiKey) schedule.aiConfig.apiKey = existingAiKey;
     }
     if (imageConfig !== undefined) {
+      const existingImgKey = imageConfig.apiKey ? undefined : schedule.imageConfig?.apiKey;
       schedule.imageConfig = this.encryptImageConfig(imageConfig);
+      if (schedule.imageConfig && existingImgKey) schedule.imageConfig.apiKey = existingImgKey;
     }
     await schedule.save();
     this.stopCrons(id);
