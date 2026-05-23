@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { CampaignsService } from './campaigns.service';
 
 /**
@@ -15,11 +15,18 @@ import { CampaignsService } from './campaigns.service';
  * pile-ups when the Meta API responds slowly.
  */
 @Injectable()
-export class CampaignsPollerService {
+export class CampaignsPollerService implements OnModuleInit {
   private readonly logger = new Logger(CampaignsPollerService.name);
   private isRunning = false;
+  private readonly cronExpr = process.env.CAMPAIGN_POLL_CRON ?? '0 */5 * * * *';
 
   constructor(private readonly campaignsService: CampaignsService) {}
+
+  onModuleInit() {
+    this.logger.log(
+      `[Cron] REG   schedule="campaign-comment-poller" expr="${this.cronExpr}" registeredAt=${new Date().toISOString()}`,
+    );
+  }
 
   /**
    * Primary polling cron — every 5 minutes by default.
@@ -32,17 +39,17 @@ export class CampaignsPollerService {
   })
   async handlePoll(): Promise<void> {
     if (this.isRunning) {
-      this.logger.warn('Campaign poll cycle still running — skipping this tick');
+      this.logger.warn(`[Cron] SKIP  schedule="campaign-comment-poller" expr="${this.cronExpr}" — previous cycle still running`);
       return;
     }
 
     this.isRunning = true;
     const start = Date.now();
-    this.logger.debug('Campaign comment poll cycle started');
+    this.logger.log(`[Cron] FIRE  schedule="campaign-comment-poller" expr="${this.cronExpr}" firedAt=${new Date().toISOString()}`);
 
     try {
       await this.campaignsService.pollAllCampaigns();
-      this.logger.debug(`Campaign poll cycle completed in ${Date.now() - start}ms`);
+      this.logger.log(`[Cron] DONE  schedule="campaign-comment-poller" durationMs=${Date.now() - start}`);
     } catch (err: any) {
       this.logger.error(`Campaign poll cycle failed: ${err.message}`);
     } finally {

@@ -5,6 +5,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as nodeCron from 'node-cron';
+import { CronJob } from 'cron';
 import { Schedule, ScheduleType, ScheduleAiConfig, ScheduleImageConfig } from './schemas/schedule.schema';
 import { IScheduleExecutor, ScheduleRuntimeConfig } from './executors/executor.interface';
 import { IPublisher } from '../providers';
@@ -65,10 +66,11 @@ export class SchedulesService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     const active = await this.scheduleModel.find({ isActive: true });
+    this.logger.log(`Startup: registering cron jobs for ${active.length} active schedule(s)…`);
     for (const schedule of active) {
       this.registerCrons(schedule);
     }
-    this.logger.log(`Registered cron jobs for ${active.length} active schedule(s) on startup`);
+    this.logger.log(`Startup complete — ${this.tasks.size} schedule(s) running, ${[...this.tasks.values()].reduce((s, t) => s + t.length, 0)} total cron(s) active`);
   }
 
   onModuleDestroy() {
@@ -165,27 +167,52 @@ export class SchedulesService implements OnModuleInit, OnModuleDestroy {
     return result;
   }
 
+  private nextFireTime(cronExpr: string): string {
+    try {
+      const job = CronJob.from({ cronTime: cronExpr, onTick: () => {}, start: false });
+      return job.nextDate().toFormat('yyyy-MM-dd HH:mm:ss');
+    } catch {
+      return 'unknown';
+    }
+  }
+
   private registerCrons(schedule: Schedule): void {
     const id = schedule._id.toString();
+    const registeredAt = new Date().toISOString();
+
     const tasks = schedule.times
       .map((cronExpr, i) => {
         if (!nodeCron.validate(cronExpr)) {
-          this.logger.warn(`Schedule ${id}: invalid cron expression at index ${i}: "${cronExpr}" — skipped`);
+          this.logger.warn(
+            `[Cron] SKIP  schedule="${schedule.name}" id=${id} type=${schedule.type} expr[${i}]="${cronExpr}" — invalid expression`,
+          );
           return null;
         }
+        const nextFire = this.nextFireTime(cronExpr);
+        this.logger.log(
+          `[Cron] REG   schedule="${schedule.name}" id=${id} type=${schedule.type} expr[${i}]="${cronExpr}" nextFire=${nextFire} registeredAt=${registeredAt}`,
+        );
         return nodeCron.schedule(cronExpr, async () => {
+          const firedAt = new Date().toISOString();
+          this.logger.log(
+            `[Cron] FIRE  schedule="${schedule.name}" id=${id} type=${schedule.type} expr="${cronExpr}" firedAt=${firedAt}`,
+          );
           const fresh = await this.scheduleModel.findById(id);
           if (fresh?.isActive) {
             this.executeSchedule(fresh).catch((err) =>
-              this.logger.error(`Cron fire failed for schedule ${id}: ${err.message}`),
+              this.logger.error(`[Cron] ERROR schedule="${schedule.name}" id=${id} expr="${cronExpr}" error="${err.message}"`),
             );
+          } else {
+            this.logger.warn(`[Cron] SKIP  schedule="${schedule.name}" id=${id} — not active at fire time`);
           }
         });
       })
       .filter((t): t is nodeCron.ScheduledTask => t !== null);
 
     this.tasks.set(id, tasks);
-    this.logger.debug(`Schedule ${id} (${schedule.name}): registered ${tasks.length} cron(s)`);
+    this.logger.log(
+      `[Cron] DONE  schedule="${schedule.name}" id=${id} type=${schedule.type} registeredCount=${tasks.length}/${schedule.times.length}`,
+    );
   }
 
   private stopCrons(scheduleId: string): void {
@@ -193,7 +220,7 @@ export class SchedulesService implements OnModuleInit, OnModuleDestroy {
     if (tasks) {
       tasks.forEach((t) => t.stop());
       this.tasks.delete(scheduleId);
-      this.logger.debug(`Schedule ${scheduleId}: stopped all cron jobs`);
+      this.logger.log(`[Cron] STOP  id=${scheduleId} stoppedCount=${tasks.length} stoppedAt=${new Date().toISOString()}`);
     }
   }
 
