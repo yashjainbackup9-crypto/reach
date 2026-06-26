@@ -10,6 +10,7 @@ import { QueuesModule } from './queues/queues.module';
 import { SchedulesModule } from './schedules/schedules.module';
 import { PostHistoryModule } from './post-history/post-history.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
+import { CronJobsModule } from './cron-jobs/cron-jobs.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { CampaignsModule } from './campaigns/campaigns.module';
     SchedulesModule,
     PostHistoryModule,
     CampaignsModule,
+    CronJobsModule,
   ],
 })
 export class AppModule { }
@@ -44,6 +46,8 @@ export function setupSwagger(app: any) {
     .addTag('Queues')
     .addTag('Content')
     .addTag('Schedules')
+    .addTag('Cron Jobs')
+    .addTag('Service API Keys')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

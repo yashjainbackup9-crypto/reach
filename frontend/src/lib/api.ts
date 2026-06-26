@@ -494,3 +494,112 @@ export const queuesApi = {
   reprocessItem: (index: number) =>
     request<{ message: string }>(`/api/queues/${index}/reprocess`, { method: 'POST' }),
 };
+
+// ─── Cron Jobs ─────────────────────────────────────────────────────────────
+
+export interface CronJobEntry {
+  _id: string;
+  name: string;
+  description?: string;
+  baseUrl: string;
+  endpoint: string;
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  body?: Record<string, any>;
+  cronExpression: string;
+  timezone: string;
+  status: 'active' | 'paused' | 'completed' | 'failed';
+  maxRetries: number;
+  retryCount: number;
+  sourceService: string;
+  sourceReferenceId?: string;
+  lastExecutedAt?: string;
+  lastResult?: { statusCode?: number; success: boolean; error?: string; duration: number };
+  nextFireAt?: string;
+  createdBy: { type: 'user' | 'service'; id: string; name?: string };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CronJobLog {
+  _id: string;
+  jobId: string;
+  status: 'success' | 'failed' | 'skipped';
+  statusCode?: number;
+  responseBody?: string;
+  errorMessage?: string;
+  duration: number;
+  attempt: number;
+  executedAt: string;
+}
+
+export interface CronJobDetail extends CronJobEntry {
+  recentLogs: CronJobLog[];
+}
+
+export interface ServiceApiKeyEntry {
+  _id: string;
+  serviceName: string;
+  isActive: boolean;
+  permissions: string[];
+  createdAt?: string;
+}
+
+export interface ServiceApiKeyCreated {
+  id: string;
+  serviceName: string;
+  apiKey: string;
+}
+
+export const cronJobsApi = {
+  getAll: (sourceService?: string, status?: string) => {
+    const params = new URLSearchParams();
+    if (sourceService) params.set('sourceService', sourceService);
+    if (status) params.set('status', status);
+    const qs = params.toString();
+    return request<CronJobEntry[]>(`/api/cron-jobs${qs ? `?${qs}` : ''}`);
+  },
+
+  getOne: (id: string) => request<CronJobDetail>(`/api/cron-jobs/${id}`),
+
+  create: (data: {
+    name: string;
+    baseUrl: string;
+    endpoint: string;
+    method?: string;
+    headers?: Record<string, string>;
+    body?: Record<string, any>;
+    cronExpression: string;
+    timezone?: string;
+    sourceReferenceId?: string;
+    maxRetries?: number;
+    expiresAt?: string;
+  }) => request<CronJobEntry>('/api/cron-jobs', { method: 'POST', body: JSON.stringify(data) }),
+
+  update: (id: string, data: Record<string, any>) =>
+    request<CronJobEntry>(`/api/cron-jobs/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  delete: (id: string) =>
+    request<{ deleted: boolean }>(`/api/cron-jobs/${id}`, { method: 'DELETE' }),
+
+  trigger: (id: string) =>
+    request<{ success: boolean; statusCode?: number; duration?: number }>(`/api/cron-jobs/${id}/trigger`, { method: 'POST' }),
+
+  pause: (id: string) =>
+    request<CronJobEntry>(`/api/cron-jobs/${id}/pause`, { method: 'POST' }),
+
+  resume: (id: string) =>
+    request<CronJobEntry>(`/api/cron-jobs/${id}/resume`, { method: 'POST' }),
+};
+
+export const serviceApiKeysApi = {
+  getAll: () => request<ServiceApiKeyEntry[]>('/api/service-api-keys'),
+
+  create: (data: { serviceName: string; webhookSecret?: string; permissions?: string[] }) =>
+    request<ServiceApiKeyCreated>('/api/service-api-keys', { method: 'POST', body: JSON.stringify(data) }),
+
+  regenerate: (id: string) =>
+    request<ServiceApiKeyCreated>(`/api/service-api-keys/${id}/regenerate`, { method: 'POST' }),
+
+  deactivate: (id: string) =>
+    request<{ id: string; serviceName: string; isActive: boolean }>(`/api/service-api-keys/${id}`, { method: 'DELETE' }),
+};

@@ -3,7 +3,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Wand2, Users, Bot, ListOrdered, LogOut, Zap, Calendar, History, Megaphone
+  LayoutDashboard, Wand2, Users, Bot, ListOrdered, LogOut, Zap, Calendar, History, Megaphone, Timer
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -16,6 +16,7 @@ const nav = [
   { label: 'Schedules',      href: '/schedules',   icon: Calendar },
   { label: 'Post History',   href: '/history',     icon: History },
   { label: 'Campaigns',      href: '/campaigns',   icon: Megaphone },
+  { label: 'Cron Jobs',      href: '/cron-jobs',   icon: Timer },
 ];
 
 export default function Sidebar() {
