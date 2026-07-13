@@ -38,10 +38,15 @@ export class CreateCronJobDto {
   @IsOptional()
   body?: Record<string, any>;
 
-  @ApiProperty({ example: '0 9 * * 1' })
+  @ApiProperty({ example: '0 9 * * 1', description: 'Standard cron expression. Mutually exclusive with fireAt.' })
   @IsString()
   @IsNotEmpty()
   cronExpression: string;
+
+  @ApiPropertyOptional({ example: '2026-07-20T15:30:00Z', description: 'One-time fire timestamp (ISO 8601). Mutually exclusive with cronExpression.' })
+  @IsDateString()
+  @IsOptional()
+  fireAt?: string;
 
   @ApiPropertyOptional({ example: 'Asia/Kolkata', default: 'UTC' })
   @IsString()

@@ -53,6 +53,9 @@ export class CronJobsService implements OnModuleInit, OnModuleDestroy {
       ? this.encryptionService.encrypt(JSON.stringify(dto.headers))
       : undefined;
 
+    const fireAtDate = dto.fireAt ? new Date(dto.fireAt) : undefined;
+    const nextFireAt = fireAtDate || this.computeNextFire(dto.cronExpression);
+
     const doc = await this.cronJobModel.create({
       ...dto,
       headers: encryptedHeaders,
@@ -63,11 +66,13 @@ export class CronJobsService implements OnModuleInit, OnModuleDestroy {
       createdBy: { type: creator.type, id: creator.id, name: creator.name },
       tenantId: creator.tenantId,
       expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
-      nextFireAt: this.computeNextFire(dto.cronExpression),
+      fireAt: fireAtDate,
+      nextFireAt,
     });
 
     this.registerCron(doc);
-    this.logger.log(`[CronJobs] Created job "${doc.name}" id=${doc._id} cron="${doc.cronExpression}"`);
+    const jobType = fireAtDate ? 'one-time' : 'recurring';
+    this.logger.log(`[CronJobs] Created job "${doc.name}" id=${doc._id} type=${jobType} nextFire=${nextFireAt?.toISOString()}`);
     return doc;
   }
 
@@ -164,6 +169,38 @@ export class CronJobsService implements OnModuleInit, OnModuleDestroy {
 
   private registerCron(job: CronJob): void {
     const id = job._id.toString();
+
+    // One-time job: schedule for fireAt timestamp
+    if (job.fireAt) {
+      const now = new Date();
+      const fireTime = new Date(job.fireAt);
+      const delayMs = fireTime.getTime() - now.getTime();
+
+      if (delayMs <= 0) {
+        this.logger.warn(`[CronJobs] SKIP job="${job.name}" id=${id} — fireAt is in the past`);
+        return;
+      }
+
+      const timeoutId = setTimeout(async () => {
+        this.logger.log(`[CronJobs] FIRE job="${job.name}" id=${id} type=one-time`);
+        const fresh = await this.cronJobModel.findById(id).exec();
+        if (fresh && fresh.status === 'active') {
+          this.executeCronJob(fresh).catch((err) =>
+            this.logger.error(`[CronJobs] ERROR job="${job.name}" id=${id}: ${err.message}`),
+          );
+        } else {
+          this.logger.warn(`[CronJobs] SKIP job="${job.name}" id=${id} — not active at fire time`);
+        }
+        this.tasks.delete(id);
+      }, delayMs);
+
+      // Store timeout ID as a dummy task so it gets cleaned up on shutdown
+      (this.tasks as any).set(id, { stop: () => clearTimeout(timeoutId) });
+      this.logger.log(`[CronJobs] REG job="${job.name}" id=${id} type=one-time fireAt=${fireTime.toISOString()}`);
+      return;
+    }
+
+    // Recurring job: use cron expression
     const expr = job.cronExpression;
 
     if (!nodeCron.validate(expr)) {
@@ -184,7 +221,7 @@ export class CronJobsService implements OnModuleInit, OnModuleDestroy {
     }, { timezone: job.timezone || 'UTC' });
 
     this.tasks.set(id, task);
-    this.logger.log(`[CronJobs] REG job="${job.name}" id=${id} cron="${expr}" tz=${job.timezone || 'UTC'}`);
+    this.logger.log(`[CronJobs] REG job="${job.name}" id=${id} type=recurring cron="${expr}" tz=${job.timezone || 'UTC'}`);
   }
 
   private stopCron(jobId: string): void {
@@ -260,18 +297,26 @@ export class CronJobsService implements OnModuleInit, OnModuleDestroy {
     const updateFields: any = {
       lastExecutedAt: new Date(),
       lastResult: { statusCode, success, error: errorMessage, duration },
-      nextFireAt: this.computeNextFire(job.cronExpression),
     };
 
     if (success) {
       updateFields.retryCount = 0;
+      // One-time jobs are marked 'completed' after successful execution
+      if (job.fireAt) {
+        updateFields.status = 'completed';
+        this.stopCron(id);
+      } else {
+        updateFields.nextFireAt = this.computeNextFire(job.cronExpression);
+      }
     } else {
       const newRetryCount = (job.retryCount || 0) + 1;
       updateFields.retryCount = newRetryCount;
       if (newRetryCount >= job.maxRetries) {
-        updateFields.status = 'failed';
+        updateFields.status = job.fireAt ? 'failed' : 'failed';
         this.stopCron(id);
         this.logger.warn(`[CronJobs] FAILED job="${job.name}" id=${id} — max retries (${job.maxRetries}) reached`);
+      } else if (!job.fireAt) {
+        updateFields.nextFireAt = this.computeNextFire(job.cronExpression);
       }
     }
 

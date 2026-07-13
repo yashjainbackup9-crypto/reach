@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Page } from 'playwright';
-import { SessionPoolService, PooledSession } from './session-pool.service';
+import { SessionPoolService } from './session-pool.service';
 import { EXTRACT_POST_SCRIPT, EXTRACT_PROFILE_SCRIPT } from './constants/instagram-scripts.constant';
 
 export interface InstagramPostData {
@@ -21,7 +21,9 @@ export interface InstagramProfilePostPreview {
 
 @Injectable()
 export class InstagramScraperService {
-    constructor(private sessionPool: SessionPoolService) { }
+    private readonly logger = new Logger(InstagramScraperService.name);
+
+    constructor(private readonly sessionPool: SessionPoolService) { }
 
     async scrapePost(url: string): Promise<InstagramPostData> {
         return this.withRetry(async (page) => {
@@ -49,37 +51,54 @@ export class InstagramScraperService {
 
     private async withRetry<T>(fn: (page: Page) => Promise<T>): Promise<T> {
         for (let attempt = 1; attempt <= 3; attempt++) {
-            const session = this.sessionPool.acquire();
+            const session = await this.sessionPool.acquire();
             if (!session) {
                 await this.randomDelay(1000, 2000);
                 continue;
             }
-            const page = await session.context.newPage();
-            await page.route('**/*', (route) => {
-                const url = route.request().url();
-                if (url.endsWith('.woff') || url.endsWith('.woff2') || url.endsWith('.mp4') || url.endsWith('.webm')) {
-                    route.abort();
-                } else {
-                    route.continue();
-                }
-            });
+
+            let page: Page | undefined;
             try {
+                page = await this.openPage(session);
                 const result = await fn(page);
                 session.requestCount++;
                 this.sessionPool.release(session);
                 return result;
             } catch (error) {
-                if (error instanceof Error && (error.message.includes('login wall') || error.message.includes('checkpoint'))) {
-                    this.sessionPool.invalidate(session);
-                }
-                this.sessionPool.release(session);
+                this.handleAttemptFailure(session, error, attempt);
                 if (attempt === 3) throw error;
                 await this.randomDelay(2000, 5000);
             } finally {
-                await page.close();
+                if (page) {
+                    await page.close().catch(() => undefined);
+                }
             }
         }
         throw new Error('All retry attempts failed');
+    }
+
+    private async openPage(session: NonNullable<Awaited<ReturnType<SessionPoolService['acquire']>>>): Promise<Page> {
+        const page = await session.context.newPage();
+        await page.route('**/*', (route) => {
+            const url = route.request().url();
+            if (url.endsWith('.woff') || url.endsWith('.woff2') || url.endsWith('.mp4') || url.endsWith('.webm')) {
+                route.abort();
+            } else {
+                route.continue();
+            }
+        });
+        return page;
+    }
+
+    private handleAttemptFailure(session: NonNullable<Awaited<ReturnType<SessionPoolService['acquire']>>>, error: unknown, attempt: number) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        if (message.includes('login wall') || message.includes('checkpoint') || message.includes('Target page, context or browser has been closed')) {
+            this.sessionPool.invalidate(session);
+        } else {
+            this.sessionPool.release(session);
+        }
+
+        this.logger.warn(`Instagram scrape attempt ${attempt} failed: ${message}`);
     }
 
     private async randomDelay(min: number, max: number): Promise<void> {

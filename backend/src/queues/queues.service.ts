@@ -116,6 +116,7 @@ export class QueuesService {
         item.status = 'ready';
         item.processedAt = new Date();
       } else if (item.type === 'instagram_link' && item.url) {
+        this.logger.log(`Scraping Instagram URL for item ${item.id}: ${item.url}`);
         const data = await this.instagramScraperService.scrapePost(item.url);
 
         item.caption = data.caption;
@@ -133,8 +134,10 @@ export class QueuesService {
     } catch (err: any) {
       item.status = 'failed';
       item.error = err?.message ?? 'Processing failed';
+      this.logger.error(`Item ${item.id} (${item.type}, url=${item.url}) failed: ${item.error}`, err?.stack);
     }
-    this.logger.log(`Processed item ${item.id} with status ${item.status}`);
+    const errorSuffix = item.error ? ` error="${item.error}"` : '';
+    this.logger.log(`Processed item ${item.id} with status ${item.status}${errorSuffix}`);
 
     await queue.save();
 

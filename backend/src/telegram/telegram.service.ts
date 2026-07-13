@@ -49,12 +49,8 @@ export class TelegramService {
 
     await this.setWebhook(dto.botToken, webhookUrl, webhookSecret);
 
-    const existing = await this.telegramBotModel.findOne({ userId, tenantId });
+    const existing = await this.telegramBotModel.findOne({ userId, tenantId, botToken: dto.botToken });
     if (existing) {
-      if (existing.botToken !== dto.botToken) {
-        await this.deleteWebhook(existing.botToken).catch(() => { });
-      }
-      existing.botToken = dto.botToken;
       existing.botUsername = info.username;
       existing.botName = info.first_name;
       existing.lastUpdateId = 0;

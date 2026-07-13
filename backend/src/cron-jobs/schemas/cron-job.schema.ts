@@ -61,6 +61,9 @@ export class CronJob extends Document {
   @Prop({ required: true })
   cronExpression: string;
 
+  @Prop({ type: Date })
+  fireAt?: Date;
+
   @Prop({ default: 'UTC' })
   timezone: string;
 

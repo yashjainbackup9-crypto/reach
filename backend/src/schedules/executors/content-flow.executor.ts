@@ -34,16 +34,7 @@ export class ContentFlowExecutor implements IScheduleExecutor {
 
     if (!item) {
       this.logger.debug(`Schedule ${schedule._id} (${schedule.name}): queue is empty`);
-      const telegramChannels = schedule.channels.filter(ch => ch.provider === 'telegram');
-      await Promise.all(
-        telegramChannels.map(ch =>
-          this.telegramService
-            .broadcastToBot(ch.accountId, schedule.tenantId, 'No item available in queue.')
-            .catch((err: any) =>
-              this.logger.warn(`Schedule ${schedule._id}: failed to send empty-queue notification — ${err.message}`),
-            ),
-        ),
-      );
+      await this.notifyTelegramChannels(schedule, 'No item available in queue.');
       return { posted: false, channelResults: [] };
     }
 
@@ -71,6 +62,7 @@ export class ContentFlowExecutor implements IScheduleExecutor {
         }
       } catch (err: any) {
         this.logger.error(`Schedule ${schedule._id}: tone rewrite failed (${err.message}) — will retry next time`);
+        await this.notifyTelegramChannels(schedule, `Post skipped: tone rewrite failed (${err.message}).`);
         return { posted: false, channelResults: [] };
       }
     }
@@ -124,6 +116,7 @@ export class ContentFlowExecutor implements IScheduleExecutor {
         }
       } catch (err: any) {
         this.logger.error(`Schedule ${schedule._id}: image generation failed (${err.message}) — will retry next time`);
+        await this.notifyTelegramChannels(schedule, `Post skipped: image generation failed (${err.message}).`);
         return { posted: false, channelResults: [] };
       }
     }
@@ -174,5 +167,18 @@ export class ContentFlowExecutor implements IScheduleExecutor {
     }
 
     return { posted: anySucceeded, itemId: item.id, channelResults };
+  }
+
+  private async notifyTelegramChannels(schedule: Schedule, message: string): Promise<void> {
+    const telegramChannels = schedule.channels.filter(ch => ch.provider === 'telegram');
+    await Promise.all(
+      telegramChannels.map(ch =>
+        this.telegramService
+          .broadcastToBot(ch.accountId, schedule.tenantId, message)
+          .catch((err: any) =>
+            this.logger.warn(`Schedule ${schedule._id}: failed to send telegram notification — ${err.message}`),
+          ),
+      ),
+    );
   }
 }

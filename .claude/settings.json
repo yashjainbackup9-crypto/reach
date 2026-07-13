@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(pm2 logs *)",
+      "Bash(pm2 list *)",
+      "Bash(timeout 90 node_modules/.bin/ts-node -T src/__tmp-test-scrape.ts)",
+      "Bash(node_modules/.bin/ts-node -T src/__tmp-test-scrape.ts)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}
